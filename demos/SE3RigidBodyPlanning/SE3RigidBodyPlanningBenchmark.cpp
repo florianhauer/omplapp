@@ -15,6 +15,9 @@
 #include <ompl/tools/benchmark/Benchmark.h>
 #include <ompl/geometric/planners/rrt/RRTConnect.h>
 #include <ompl/geometric/planners/rrt/RRT.h>
+#include <ompl/geometric/planners/rrt/RRTstar.h>
+#include <ompl/geometric/planners/rrt/RRTsharp.h>
+#include <ompl/geometric/planners/rrt/DRRT.h>
 #include <ompl/geometric/planners/kpiece/LBKPIECE1.h>
 #include <ompl/geometric/planners/kpiece/BKPIECE1.h>
 #include <ompl/geometric/planners/kpiece/KPIECE1.h>
@@ -66,8 +69,8 @@ void benchmark1(std::string& benchmark_name, app::SE3RigidBodyPlanning& setup,
                 double& runtime_limit, double& memory_limit, int& run_count)
 {
     benchmark_name = std::string("Twistycool");
-    std::string robot_fname = std::string(OMPLAPP_RESOURCE_DIR) + "/3D/Twistycool_robot.dae";
-    std::string env_fname = std::string(OMPLAPP_RESOURCE_DIR) + "/3D/Twistycool_env.dae";
+    std::string robot_fname = std::string(OMPLAPP_RESOURCE_DIR) + "/3D/Easy_robot.dae";
+    std::string env_fname = std::string(OMPLAPP_RESOURCE_DIR) + "/3D/Easy_env.dae";
     setup.setRobotMesh(robot_fname.c_str());
     setup.setEnvironmentMesh(env_fname.c_str());
 
@@ -95,9 +98,9 @@ void benchmark1(std::string& benchmark_name, app::SE3RigidBodyPlanning& setup,
     setup.setStartAndGoalStates(start, goal);
     setup.getSpaceInformation()->setStateValidityCheckingResolution(0.01);
 
-    runtime_limit = 60.0;
+    runtime_limit = 10.0;
     memory_limit  = 10000.0; // set high because memory usage is not always estimated correctly
-    run_count     = 50;
+    run_count     = 3;
 }
 
 void preRunEvent(const base::PlannerPtr& /*planner*/)
@@ -130,14 +133,44 @@ int main(int argc, char **argv)
     b.setPostRunEvent([](const base::PlannerPtr& planner, tools::Benchmark::RunProperties& run)
         { postRunEvent(planner, run); });
 
-    b.addPlanner(std::make_shared<geometric::RRTConnect>(setup.getSpaceInformation()));
+/*    b.addPlanner(std::make_shared<geometric::RRTConnect>(setup.getSpaceInformation()));
     b.addPlanner(std::make_shared<geometric::RRT>(setup.getSpaceInformation()));
     b.addPlanner(std::make_shared<geometric::BKPIECE1>(setup.getSpaceInformation()));
     b.addPlanner(std::make_shared<geometric::LBKPIECE1>(setup.getSpaceInformation()));
     b.addPlanner(std::make_shared<geometric::KPIECE1>(setup.getSpaceInformation()));
     b.addPlanner(std::make_shared<geometric::SBL>(setup.getSpaceInformation()));
     b.addPlanner(std::make_shared<geometric::EST>(setup.getSpaceInformation()));
-    b.addPlanner(std::make_shared<geometric::PRM>(setup.getSpaceInformation()));
+    b.addPlanner(std::make_shared<geometric::PRM>(setup.getSpaceInformation()));*/
+
+double range = 0.1f * setup.getSpaceInformation()->getMaximumExtent();
+    bool knn = true;
+
+	auto rrtsh(std::make_shared<ompl::geometric::RRTsharp>(setup.getSpaceInformation()));
+	rrtsh->setRange(range);
+	rrtsh->setKNearest(knn);
+	b.addPlanner(rrtsh);
+
+	auto drrttdo(std::make_shared<ompl::geometric::DRRT>(setup.getSpaceInformation()));
+	drrttdo->setName("DRRT_DO");
+	drrttdo->setRange(range);
+	drrttdo->setVariant(ompl::geometric::DRRT::Variant::TREE);
+	drrttdo->setGDFlags(GD_MAX_N_DEPTH | GD_APPROX_DESCENDANT_N | GD_IF_SOLUTION);
+	drrttdo->setGDMaxDepthDescendantApprox(0u);
+	drrttdo->setGDMaxDepth(5u);
+	drrttdo->setKNearest(knn);
+	drrttdo->setDelayOptimizationUntilSolution(true);
+	b.addPlanner(drrttdo);
+
+    auto drrttsn(std::make_shared<ompl::geometric::DRRT>(setup.getSpaceInformation()));
+    drrttsn->setName("DRRT_SN_DO");
+    drrttsn->setRange(range);
+    drrttsn->setVariant(ompl::geometric::DRRT::Variant::TREE);
+    drrttsn->setKNearest(knn);
+    drrttsn->setGDFlags(GD_MAX_N_DEPTH | GD_APPROX_DESCENDANT_N | GD_IF_SOLUTION);
+    drrttsn->setGDMaxDepthDescendantApprox(0u);
+    drrttsn->setGDMaxDepth(1u);
+    drrttdo->setDelayOptimizationUntilSolution(true);
+    b.addPlanner(drrttsn);
 
     int sampler_id = argc > 2 ? ((argv[2][0] - '0') % 4) : -1;
 
